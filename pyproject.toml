@@ -1,0 +1,9 @@
+[project]
+name = "iris-classifier"
+version = "0.0.1"
+description = ""
+readme = "README.md"
+
+[[project.authors]]
+email = "hanjaeha24@naver.com"
+name = "Jae-Ha Han"
