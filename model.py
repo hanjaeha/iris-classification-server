@@ -231,7 +231,7 @@ class TrainingData:
                 self.testing.append(test)
             else:
                 train = TrainingKnownSample(
-                    species=row["species"]
+                    species=row["species"],
                     sepal_length=float(row["sepal_length"]),
                     sepal_width=float(row["sepal_width"]),
                     petal_length=float(row["petal_length"]),
