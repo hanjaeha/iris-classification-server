@@ -1,9 +1,12 @@
 import math
 import datetime
+import weakref
 import collections
-from typing import Optional, Iterable, Union, Counter
+from typing import Optional, Iterable, Union, Counter, cast
 
-from model import Sample
+
+class InvalidSampleError(ValueError):
+    """"""
 
 
 class Sample: # 샘플이라는 class는 데이타셋을 학습 테스트, 데이터를 저장하는 클래스다.
@@ -69,15 +72,45 @@ class KnownSample(Sample): # 이 Sample은 위에 만들어놨던 class Sample
             f"species={self.species!r}"
             f")"
         )
+    
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> "KnownSample": # 클래스 그 자체이기 때문에 self 말고 cls를 넣음
+        if row["species"] not in {"Iris-setosa", "Iris-versicolour", "Iris-virginica"}:
+            raise InvalidSampleError(f"invalid species in {row!r}") # 에러 방지됨
+        try:
+            return cls(
+                species=row["species"],
+                sepal_length=float(row["sepal_length"]),
+                sepal_width=float(row["sepal_width"]),
+                petal_length=float(row["petal_length"]),
+                petal_width=float(row["petal_width"])
+            )
+        except ValueError as e:
+            raise InvalidSampleError(f"invalid {row!r}")
 
 
 class UnknownSample(Sample):
     """Sample provided by an user, not yet classified."""
-    pass
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> "UnknownSample":
+        if set(row.keys()) != {"sepal_length", "sepal_width", "petal_length", "petal_width"
+        }:
+            raise InvalidSampleError(f"invalid fields in {row!r}")
+        try:
+            return cls(
+                sepal_length=float(row["sepal_length"]),
+                sepal_width=float(row["sepal_width"]),
+                petal_length=float(row["petal_length"]),
+                petal_width=float(row["petal_width"])
+            )
+        except (ValueError, KeyError) as e:
+            raise InvalidSampleError(f"invalid {row!r}")        
 
 
-class TrainingKnownSample:
-    pass
+class TrainingKnownSample(KnownSample): # (KnownSample)을 상속받음
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> "TrainingKnownSample":
+        return cast(TrainingKnownSample, super().from_dict(row)) # super는 부모클래스, 즉 KnownSample
 
 
 class TestingKnownSample(KnownSample):
@@ -113,7 +146,10 @@ class TestingKnownSample(KnownSample):
 
     def matches(self) -> bool:
         return self.species == self.classification
-
+    
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> "TestingKnownSample":
+        return cast(TestingKnownSample, super().from_dict(row)) # 리턴되는 것을 보여주려고 계속 써주는 것(인풋과 리턴값을 알려줌)
 
 class ClassifiedSample(Sample):
     """for user(유저가 보는 창)"""
@@ -176,12 +212,12 @@ class Hyperparameter:
     def __init__(self, k: int, algorithm : Distance, training: "TrainingData") -> None: # Return이 없기 때문에, 그리고 밑에 k랑 training에 물결표시 떠서 인자 넣음
         self.k = k
         self.algorithm = algorithm
-        self.data: TrainingData = training
+        self.data: weakref.ReferenceType["TrainingData"] = weakref.ref(training)
         self.quality: float
 
     def classify(self, sample: Union[UnknownSample, TestingKnownSample]) -> str: # 꽃 종류를 이야기할 것 이므로 str
         """K-NN algorithm"""
-        training_data = self.data
+        training_data = self.data() # 그냥 가지고 오는게 아니라 메소드로 처리
         if not training_data:
             raise RecursionError("No TrainingData object!")
         distances: list[tuple[float, TrainingKnownSample]] = \
