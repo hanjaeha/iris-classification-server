@@ -2,7 +2,8 @@ import math
 import datetime
 import weakref
 import collections
-from typing import Optional, Iterable, Union, Counter, cast
+from enum import IntEnum
+from typing import Optional, Iterable, Union, Counter, cast, Any
 
 
 class InvalidSampleError(ValueError):
@@ -16,95 +17,125 @@ class Sample: # 샘플이라는 class는 데이타셋을 학습 테스트, 데�
         sepal_length: float,
         sepal_width: float,
         petal_length: float,
-        petal_width: float,
-        species: Optional[str] = None # 기계학습에선 정답이 없으므로 옵셔널이라 쓰고 없으면 None
-        # ctrl 누르고 Optional 누르면 vscode의 리팩토리 기능을 쓸 수 있다
+        petal_width: float
+
     ) -> None: # Return 할 것이 아무것도 없다
         self.sepal_length = sepal_length
         self.sepal_width = sepal_width
         self.petal_length = petal_length
         self.petal_width = petal_width
-        self.species = species
-        self.classification: Optional[str] = None
+
+    def __eq__(self, other: Any) -> bool:
+        if type(other) != type(self):
+            return False
+        other = cast(Sample, other)
+        return all([
+            self.sepal_length == other.sepal_length,
+            self.sepal_width == other.sepal_width,
+            self.petal_length == other.petal_length,
+            self.petal_width == other.petal_width
+        ])
+    
+    @property # 프로퍼티로 감싸주게 되면 속성처럼 사용 가능
+    def attr_dict(self) -> dict[str, str]:
+        return dict(
+            sepal_length=f"{self.sepal_length!r}",
+            sepal_width=f"{self.sepal_width}",
+            petal_length=f"{self.petal_length}",
+            petal_width=f"{self.petal_width}"
+        )
 
     def __repr__(self) -> str: # representation (sample1, 2, 3, ... , 100000 이렇게 다 하긴 힘들어서 만듬)
-        return (
-            f"{self.__class__.__name__}("
-            f"sepal_length={self.sepal_length}, "
-            f"sepal_width={self.sepal_width}, "
-            f"petal_length={self.petal_length}, "
-            f"petal_width={self.petal_width}, "
-            f"species={self.species!r}"
-            f")"
-        )
+        base_attributes = self.attr_dict
+        attrs = ", ".join(f"{k}={v}" for k, v in base_attributes.items())
+        return f"{self.__class__.__name__}({attrs})"
     
-    def classify(self, classification: str) -> None:
-         self.classification = classification # 이렇게 저장만 시켜줄 것이기 때문에 윗줄에 return이 없다
 
-    def matches(self) -> bool:
-        return self.species == self.classification
-    
+class Purpose(IntEnum):
+    Classification = 0
+    Testing = 1
+    Training = 2
+
 
 class KnownSample(Sample): # 이 Sample은 위에 만들어놨던 class Sample
     def __init__(
         self,
-        species: str,
         sepal_length: float,
         sepal_width: float,
         petal_length: float,
         petal_width: float,
+        purpose: int,
+        species: str,
     ) -> None:
+        purpose_enum = Purpose(purpose)
+        if purpose_enum not in {Purpose.Training, Purpose.Testing}:
+            raise ValueError(f"Invalid purpose: {purpose!r}: {purpose_enum}")
         super().__init__(
             sepal_length=sepal_length,
             sepal_width=sepal_width,
             petal_length=petal_length,
             petal_width=petal_width
         )
+        self.purpose = purpose_enum
         self.species = species
+        self._classification: Optional[str] = None
+
+    def matches(self) -> bool:
+        return self.species == self.classification
+    
+    @property
+    def classification(self) -> Optional[str]:
+        if self.purpose == Purpose.Testing:
+            return self._classification
+        else:
+            raise AttributeError(f"Training samples have no classification")
+        
+    @classification.setter
+    def classification(self, value: str) -> None:
+        if self.purpose == Purpose.Testing:
+            self._classification = value
+        else:
+            raise AttributeError("Training samples cannot be classified!")
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"sepal_length={self.sepal_length}, "
-            f"sepal_width={self.sepal_width}, "
-            f"petal_length={self.petal_length}, "
-            f"petal_width={self.petal_width}, "
-            f"species={self.species!r}"
-            f")"
-        )
-    
-    @classmethod
-    def from_dict(cls, row: dict[str, str]) -> "KnownSample": # 클래스 그 자체이기 때문에 self 말고 cls를 넣음
-        if row["species"] not in {"Iris-setosa", "Iris-versicolour", "Iris-virginica"}:
-            raise InvalidSampleError(f"invalid species in {row!r}") # 에러 방지됨
-        try:
-            return cls(
-                species=row["species"],
-                sepal_length=float(row["sepal_length"]),
-                sepal_width=float(row["sepal_width"]),
-                petal_length=float(row["petal_length"]),
-                petal_width=float(row["petal_width"])
-            )
-        except ValueError as e:
-            raise InvalidSampleError(f"invalid {row!r}")
+        base_attributes = self.attr_dict
+        base_attributes["purpose"] = f"{self.purpose.value}"
+        base_attributes["species"] = f"{self.species!r}"
+        if self.purpose == Purpose.Testing and self._classification:
+            base_attributes["classification"] = f"{self._classification}"
+        attrs = ", ".join(f"{k}={v}" for k, v in base_attributes.items())
+        return f"{self.__class__.__name__}({attrs})"
 
 
 class UnknownSample(Sample):
-    """Sample provided by an user, not yet classified."""
-    @classmethod
-    def from_dict(cls, row: dict[str, str]) -> "UnknownSample":
-        if set(row.keys()) != {"sepal_length", "sepal_width", "petal_length", "petal_width"
-        }:
-            raise InvalidSampleError(f"invalid fields in {row!r}")
-        try:
-            return cls(
-                sepal_length=float(row["sepal_length"]),
-                sepal_width=float(row["sepal_width"]),
-                petal_length=float(row["petal_length"]),
-                petal_width=float(row["petal_width"])
-            )
-        except (ValueError, KeyError) as e:
-            raise InvalidSampleError(f"invalid {row!r}")        
+    def __init__(
+        self, 
+        sepal_length: float,
+        sepal_width: float, 
+        petal_length: float, 
+        petal_width: float
+    ) -> None:
+        super().__init__(
+            sepal_length=sepal_length, 
+            sepal_width=sepal_width,
+            petal_length=petal_length,
+            petal_width=petal_width
+        )
+        self._classification: Optional[str] = None
+
+    @property
+    def classification(self) -> Optional[str]:
+        return self._classification
+    
+    @classification.setter
+    def classification(self, value: str) -> None:
+        self._classification = value
+
+    def __repr__(self) -> str:
+        base_attributes = self.attr_dict
+        base_attributes["classification"] = f"{self.classification!r}"
+        attrs = ", ".join(f"{k}={v}" for k, v in base_attributes.items())
+        return f"{self.__class__.__name__}({attrs})"
 
 
 class TrainingKnownSample(KnownSample): # (KnownSample)을 상속받음
