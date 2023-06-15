@@ -11,7 +11,7 @@ import sys
 
 
 @dataclass
-class Sample:
+class Sample(NamedTuple):
     """Abstract superclass for all samples."""
     sepal_length: float
     sepal_width: float
@@ -19,30 +19,43 @@ class Sample:
     petal_width: float
 
 
-@dataclass
 class KnownSample(Sample):
     """Represents a sample of testing or training data, the species is set once
     The purpose determines if it can or cannot be classified.
     """
+    sample: Sample
     species: str
 
 
-@dataclass
 class TestingKnownSample(KnownSample):
-    classification: Optional[str] = None
+    def __init__(
+        self, sample: KnownSample, classification: Optional[str] = None
+    ) -> None:
+        self.sample = sample
+        self.classification = classification
+
+    def __repr__(self) -> str:
+        return(
+            f"{self.__class__.__name__}(sample = {self.sample!r}, "
+            f"classification = {self.classification!r})"
+        )
 
 
-@dataclass
-class TrainingKnownSample(KnownSample):
+class TrainingKnownSample(NamedTuple):
     """Cannot be classified -- there's no classification instance variable available."""
+    sample: KnownSample
 
-    pass
 
-
-@dataclass
-class UnknownSample(Sample):
+class UnknownSample:
     """A sample provided by a User, to be classified."""
-    classification: Optional[str] = None
+    def __init__(
+        self, sample: KnownSample, classification: Optional[str] = None
+    ) -> None:
+        self.sample = sample
+        self.classification = classification
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(sample = {self.sample!r}, classification = {self.classification!r})"
 
 
 class Distance:
@@ -52,14 +65,14 @@ class Distance:
         raise NotImplementedError
 
 
-@dataclass
 class Hyperparameter:
     """A hyperparameter value and the overall quality of the classification."""
 
-    k: int
-    algorithm: Distance
-    data: weakref.ReferenceType["TrainingData"]
-
+    def __init__(self, k: int, algorithm: Distance, data: "TrainingData") -> None:
+        self.k = k
+        self.algorithm = algorithm
+        self.data = weakref.ref(data)
+        
     def classify(self, sample: Sample) -> str:
         """The K-NN algorithm"""
         if not (training_data := self.data()):
@@ -75,12 +88,11 @@ class Hyperparameter:
         return species
 
 
-@dataclass
 class TrainingData:
     """A set of training data and testing data with methods to load and test the samples."""
-    testing: List[TestingKnownSample]
-    training: List[TrainingKnownSample]
-    tuning: List[Hyperparameter]
+    testing: List[TestingKnownSample] = list()
+    training: List[TrainingKnownSample] = list()
+    tuning: List[Hyperparameter] = list()
 
 
 # Special case, we don't *often* test abstract superclasses.

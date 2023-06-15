@@ -10,7 +10,7 @@ import weakref
 import sys
 
 
-@dataclass
+@dataclass(frozen=True)
 class Sample:
     """Abstract superclass for all samples."""
     sepal_length: float
@@ -19,7 +19,7 @@ class Sample:
     petal_width: float
 
 
-@dataclass
+@dataclass(frozen=True)
 class KnownSample(Sample):
     """Represents a sample of testing or training data, the species is set once
     The purpose determines if it can or cannot be classified.
@@ -29,19 +29,22 @@ class KnownSample(Sample):
 
 @dataclass
 class TestingKnownSample(KnownSample):
+    sample: KnownSample
     classification: Optional[str] = None
 
 
-@dataclass
-class TrainingKnownSample(KnownSample):
+@dataclass(frozen=True)
+class TrainingKnownSample:
     """Cannot be classified -- there's no classification instance variable available."""
 
-    pass
-
+    sample: KnownSample
 
 @dataclass
+
+
 class UnknownSample(Sample):
     """A sample provided by a User, to be classified."""
+    sample: Sample
     classification: Optional[str] = None
 
 
